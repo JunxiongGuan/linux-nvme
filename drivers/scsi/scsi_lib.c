@@ -779,21 +779,17 @@ void scsi_io_completion(struct scsi_cmnd *cmd, unsigned int good_bytes)
 		sense_valid = scsi_command_normalize_sense(cmd, &sshdr);
 		if (sense_valid)
 			sense_deferred = scsi_sense_is_deferred(&sshdr);
+
+		if (!sense_deferred)
+			error = __scsi_error_from_host_byte(cmd, result);
 	}
 
 	if (blk_rq_is_passthrough(req)) {
-		if (result) {
-			if (sense_valid) {
-				/*
-				 * SG_IO wants current and deferred errors
-				 */
-				scsi_req(req)->sense_len =
-					min(8 + cmd->sense_buffer[7],
-					    SCSI_SENSE_BUFFERSIZE);
-			}
-			if (!sense_deferred)
-				error = __scsi_error_from_host_byte(cmd, result);
+		if (result && sense_valid) {
+			scsi_req(req)->sense_len = min(8 + cmd->sense_buffer[7],
+						       SCSI_SENSE_BUFFERSIZE);
 		}
+
 		/*
 		 * __scsi_error_from_host_byte may have reset the host_byte
 		 */
@@ -812,13 +808,6 @@ void scsi_io_completion(struct scsi_cmnd *cmd, unsigned int good_bytes)
 				BUG();
 			return;
 		}
-	} else if (blk_rq_bytes(req) == 0 && result && !sense_deferred) {
-		/*
-		 * Flush commands do not transfers any data, and thus cannot use
-		 * good_bytes != blk_rq_bytes(req) as the signal for an error.
-		 * This sets the error explicitly for the problem case.
-		 */
-		error = __scsi_error_from_host_byte(cmd, result);
 	}
 
 	/* no bidi support for !blk_rq_is_passthrough yet */
@@ -848,7 +837,6 @@ void scsi_io_completion(struct scsi_cmnd *cmd, unsigned int good_bytes)
 		else if (!(req->rq_flags & RQF_QUIET))
 			scsi_print_sense(cmd);
 		result = 0;
-		/* for passthrough error may be set */
 		error = 0;
 	}
 
@@ -876,8 +864,6 @@ void scsi_io_completion(struct scsi_cmnd *cmd, unsigned int good_bytes)
 	 */
 	if (result == 0)
 		goto requeue;
-
-	error = __scsi_error_from_host_byte(cmd, result);
 
 	if (host_byte(result) == DID_RESET) {
 		/* Third party bus reset or reset for error recovery
