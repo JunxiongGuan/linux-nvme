@@ -747,7 +747,8 @@ static int pd_special_command(struct pd_unit *disk,
 
 	rq->special = func;
 
-	err = blk_execute_rq(disk->gd->queue, disk->gd, rq, 0);
+	blk_execute_rq(disk->gd->queue, disk->gd, rq, 0);
+	err = req->errors ? -EIO : 0;
 
 	blk_put_request(rq);
 	return err;
