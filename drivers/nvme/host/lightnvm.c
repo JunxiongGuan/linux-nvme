@@ -484,7 +484,7 @@ static void nvme_nvm_end_io(struct request *rq, int error)
 	struct nvm_rq *rqd = rq->end_io_data;
 
 	rqd->ppa_status = nvme_req(rq)->result.u64;
-	rqd->error = nvme_req(req)->status;
+	rqd->error = nvme_req(rq)->status;
 	nvm_end_io(rqd);
 
 	kfree(nvme_req(rq)->cmd);
@@ -611,7 +611,7 @@ static int nvme_nvm_submit_user_cmd(struct request_queue *q,
 	__le64 *metadata = NULL;
 	dma_addr_t metadata_dma;
 	DECLARE_COMPLETION_ONSTACK(wait);
-	int ret;
+	int ret = 0;
 
 	rq = nvme_alloc_request(q, (struct nvme_command *)vcmd, 0,
 			NVME_QID_ANY);
@@ -683,8 +683,8 @@ submit:
 
 	if (nvme_req(req)->flags & NVME_REQ_CANCELLED)
 		ret = -EINTR;
-	else
-		ret = nvme_error_status(rq);
+	else if (nvme_req(rq)->status & 0x7ff)
+		ret = -EIO;
 	if (result)
 		*result = nvme_req(rq)->status & 0x7ff;
 	if (status)
