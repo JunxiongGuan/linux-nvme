@@ -95,6 +95,11 @@ struct nvme_request {
 	u16			status;
 };
 
+/*
+ * Mark a bio as coming in through the mpath node.
+ */
+#define REQ_NVME_MPATH		REQ_DRV
+
 enum {
 	NVME_REQ_CANCELLED		= (1 << 0),
 };
@@ -136,7 +141,6 @@ struct nvme_ctrl {
 	struct device ctrl_device;
 	struct device *device;	/* char device */
 	struct cdev cdev;
-	struct ida ns_ida;
 	struct work_struct reset_work;
 
 	struct nvme_subsystem *subsys;
@@ -213,6 +217,7 @@ struct nvme_subsystem {
 	char			model[40];
 	char			firmware_rev[8];
 	u16			vendor_id;
+	struct ida		ns_ida;
 };
 
 /*
@@ -232,12 +237,19 @@ struct nvme_ns_ids {
  * only ever has a single entry for private namespaces.
  */
 struct nvme_ns_head {
+	struct nvme_ns __rcu	*current_path;
+	struct gendisk		*disk;
 	struct list_head	list;
 	struct srcu_struct      srcu;
+	struct nvme_subsystem	*subsys;
+	struct bio_list		requeue_list;
+	spinlock_t		requeue_lock;
+	struct work_struct	requeue_work;
 	unsigned		ns_id;
 	struct nvme_ns_ids	ids;
 	struct list_head	entry;
 	struct kref		ref;
+	int			instance;
 };
 
 struct nvme_ns {
@@ -250,7 +262,6 @@ struct nvme_ns {
 	struct nvm_dev *ndev;
 	struct kref kref;
 	struct nvme_ns_head *head;
-	int instance;
 
 	int lba_shift;
 	u16 ms;

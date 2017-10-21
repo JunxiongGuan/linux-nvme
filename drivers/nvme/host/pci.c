@@ -1050,6 +1050,8 @@ static int nvme_poll(struct blk_mq_hw_ctx *hctx, unsigned int tag)
 {
 	struct nvme_queue *nvmeq = hctx->driver_data;
 
+	printk_ratelimited("%s: called\n", __func__);
+
 	return __nvme_poll(nvmeq, tag);
 }
 
